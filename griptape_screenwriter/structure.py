@@ -1,11 +1,11 @@
-import json
-import sys
 import os
+import sys
+from typing import List
+from pydantic import BaseModel
+
 from griptape.structures import Workflow
 from griptape.tasks import StructureRunTask
 from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
-from pydantic import BaseModel, Field
-from typing import List
 
 # --- SCHEMAS ---
 class PlotOutline(BaseModel):
@@ -143,4 +143,3 @@ def run_workflow():
 
     workflow.output_task_id = scene_task.id
     return workflow
-
