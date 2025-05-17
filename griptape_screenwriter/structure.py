@@ -2,7 +2,6 @@
 from griptape.structures import Workflow
 from griptape.tasks import StructureRunTask
 from griptape.drivers import OpenAiChatPromptDriver
-from griptape.drivers.structure_run.local import LocalStructureRunDriver
 from pydantic import BaseModel, Field
 from typing import List
 import os
@@ -54,7 +53,7 @@ def build_plot_architect():
         " Track protagonist's Desire vs Need. Output JSON with title, theme, protagonist_desire, protagonist_need, and scenes."
         "\n\nPremise: {{ input.premise }}"
     )
-    return lambda: StructureRunTask(
+    return StructureRunTask(
         id="plot_architect",
         prompt_template=prompt,
         input_schema=type("PlotInput", (BaseModel,), {"premise": (str, ...)}),
@@ -68,7 +67,7 @@ def build_character_designer():
         " Include name, role, backstory, desire, need, and arc. Output as JSON."
         "\n\nOutline: {{ input.outline }}"
     )
-    return lambda: StructureRunTask(
+    return StructureRunTask(
         id="character_designer",
         prompt_template=prompt,
         input_schema=type("CharInput", (BaseModel,), {"outline": (PlotOutline, ...)}),
@@ -82,7 +81,7 @@ def build_thematic_analyst():
         " Check each scene for value change, character arc consistency, and theme support."
         "\n\nOutline: {{ input.outline }}\nCharacters: {{ input.characters }}"
     )
-    return lambda: StructureRunTask(
+    return StructureRunTask(
         id="thematic_analyst",
         prompt_template=prompt,
         input_schema=StoryContext,
@@ -96,13 +95,37 @@ def build_scene_shaper():
         " Each scene must reflect the value change described and use proper screenplay formatting."
         "\n\nOutline: {{ input.outline }}\nCharacters: {{ input.characters }}"
     )
-    return lambda: StructureRunTask(
+    return StructureRunTask(
         id="scene_shaper",
         prompt_template=prompt,
         input_schema=StoryContext,
         output_schema=Screenplay,
         prompt_driver=OpenAiChatPromptDriver(model="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
     )
+
+# --- WORKFLOW ---
+def run_workflow():
+    workflow = Workflow()
+
+    premise_input = {"premise": "A timid farmer must confront a dragon to save his village."}
+
+    plot_task = workflow.add_task(build_plot_architect(), input=premise_input)
+
+    char_task = workflow.add_task(build_character_designer(),
+                                  input={"outline": "{{ tasks.plot_architect.output }}"},
+                                  parent_task_id=plot_task.id)
+
+    analysis_task = workflow.add_task(build_thematic_analyst(),
+                                      input={"outline": "{{ tasks.plot_architect.output }}",
+                                             "characters": "{{ tasks.character_designer.output }}"},
+                                      parent_task_id=char_task.id)
+
+    scene_task = workflow.add_task(build_scene_shaper(),
+                                   input={"outline": "{{ tasks.plot_architect.output }}",
+                                          "characters": "{{ tasks.character_designer.output }}"},
+                                   parent_task_id=analysis_task.id)
+
+    return workflow
 
 # --- WORKFLOW ---
 def run_workflow():
