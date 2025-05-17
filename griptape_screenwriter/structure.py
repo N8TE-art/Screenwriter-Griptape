@@ -35,17 +35,11 @@ class Screenplay(BaseModel):
 # --- AGENTS ---
 def build_plot_architect():
     prompt = (
-        "Respond ONLY with raw JSON. Do not include any explanations.
-"
-        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.
-"
-        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.
-"
+        "Respond ONLY with raw JSON. Do not include any explanations.\n"
+        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.\n"
+        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.\n"
         "Return an object with keys: 'logline' (string), 'outline' (array of scene descriptions)."
-    ) and 'outline' (array of scene descriptions)."
-    ) and 'outline' (array of scene descriptions)."
-    ) and 'outline' (array of scene descriptions)."
-    ) and 'outline' (array of scene descriptions).")
+    )
     input_schema = type("PlotInput", (BaseModel,), {"premise": (str, ...)})
     return StructureRunTask(
         id="plot_architect",
@@ -56,12 +50,11 @@ def build_plot_architect():
     )
 
 def build_character_designer():
-    prompt = ("Respond ONLY with raw JSON. Do not include any explanations.
-" +
-        "You are a Character Designer. Given the premise '{{ input.premise }}' and outline:
-{{ input.outline }}
-" +
-        "Generate character profiles as JSON with fields: name, role, description, and arc.")
+    prompt = (
+        "Respond ONLY with raw JSON. Do not include any explanations.\n"
+        "You are a Character Designer. Given the premise '{{ input.premise }}' and outline:\n{{ input.outline }}\n"
+        "Generate character profiles as JSON with fields: name, role, description, and arc."
+    )
     input_schema = type("CharInput", (BaseModel,), {
         "premise": (str, ...),
         "outline": (str, ...)
@@ -75,14 +68,11 @@ def build_character_designer():
     )
 
 def build_thematic_analyst():
-    prompt = ("Respond ONLY with raw JSON. Do not include any explanations.
-" +
-        "You are a Thematic Analyst. Given the outline:
-{{ input.outline }}
-and characters:
-{{ input.characters }}
-" +
-        "List each scene's value change as JSON: scene, from_value, to_value.")
+    prompt = (
+        "Respond ONLY with raw JSON. Do not include any explanations.\n"
+        "You are a Thematic Analyst. Given the outline:\n{{ input.outline }}\nand characters:\n{{ input.characters }}\n"
+        "List each scene's value change as JSON: scene, from_value, to_value."
+    )
     input_schema = type("ThemeInput", (BaseModel,), {
         "outline": (str, ...),
         "characters": (str, ...)
@@ -96,15 +86,15 @@ and characters:
     )
 
 def build_scene_shaper():
-    prompt = ("Respond ONLY with raw JSON. Do not include any explanations.
-" +
-        "You are a Screenwriter. Write a full screenplay using:
-Premise: {{ input.premise }}
-Outline: {{ input.outline }}
-Characters: {{ input.characters }}
-Value Transitions: {{ input.transitions }}
-" +
-        "Return the complete script in one text block.")
+    prompt = (
+        "Respond ONLY with raw JSON. Do not include any explanations.\n"
+        "You are a Screenwriter. Write a full screenplay using:\n"
+        "Premise: {{ input.premise }}\n"
+        "Outline: {{ input.outline }}\n"
+        "Characters: {{ input.characters }}\n"
+        "Value Transitions: {{ input.transitions }}\n"
+        "Return the complete script in one text block."
+    )
     input_schema = type("ScriptInput", (BaseModel,), {
         "premise": (str, ...),
         "outline": (str, ...),
@@ -153,5 +143,4 @@ def run_workflow():
 
     workflow.output_task_id = scene_task.id
     return workflow
-
 
