@@ -133,4 +133,5 @@ def run_workflow():
         parent_task_id=theme_task.id
     )
 
+    workflow.output_task_id = scene_task.id
     return workflow
