@@ -146,13 +146,9 @@ def run_workflow():
     def debug(task_id, label):
         task = workflow.find_task_by_id(task_id)
         if task and task.output:
-            print(f"
-=== {label} Output ===
-{task.output.value}
-")
+            print("\n=== {} Output ===\n{}\n".format(label, task.output.value))
         else:
-            print(f"
-=== {label} Output: None or Invalid ===")
+            print("\n=== {} Output: None or Invalid ===".format(label))
 
     debug(plot_task.id, "PLOT")
     debug(char_task.id, "CHARACTERS")
@@ -160,3 +156,4 @@ def run_workflow():
     debug(scene_task.id, "SCREENPLAY")
 
     return workflow
+
