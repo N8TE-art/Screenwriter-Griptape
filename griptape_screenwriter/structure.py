@@ -37,13 +37,11 @@ def build_plot_architect():
     prompt = (
         "Respond ONLY with raw JSON. Do not include any explanations.
 "
-        "You are a Screenwriter. Write a full screenplay using:
-Premise: {{ input.premise }}
-Outline: {{ input.outline }}
-Characters: {{ input.characters }}
-Value Transitions: {{ input.transitions }}
+        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.
 "
-        "Return the complete script in one text block."
+        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.
+"
+        "Return an object with keys 'logline' (string) and 'outline' (array of scene descriptions)."
     ) and 'outline' (array of scene descriptions)."
     ) and 'outline' (array of scene descriptions).")
     input_schema = type("PlotInput", (BaseModel,), {"premise": (str, ...)})
