@@ -1,1 +1,4 @@
-<PASTE STRUCTURE.PY CONTENT HERE>
+def run_workflow():
+    workflow = Workflow()
+    ...
+    return workflow
