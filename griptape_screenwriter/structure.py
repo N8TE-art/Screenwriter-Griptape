@@ -9,7 +9,7 @@ class ScreenwritingWorkflow(Workflow):
         super().__init__()
         # Agent 1: Plot Architect - generates logline and outline from premise
         outline_task = PromptTask(
-            prompt_template=(
+            prompt=(
                 "You are a Plot Architect writing a screenplay outline based on the premise: '{{ args[0] }}'.\n"
                 "- Provide a one-sentence **Logline** encapsulating the story.\n"
                 "- Provide a **Story Outline** as a list of scenes, each with a brief description.\n\n"
@@ -20,7 +20,7 @@ class ScreenwritingWorkflow(Workflow):
         )
         # Agent 2: Character Designer - creates characters using premise and outline
         characters_task = PromptTask(
-            prompt_template=(
+            prompt=(
                 "You are a Character Designer. Based on the premise '{{ args[0] }}' and the following story outline:\n"
                 "{{ parent_outputs['outline'] }}\n\n"
                 "List the main characters in JSON format. Include for each: name, role (e.g., protagonist/antagonist), a brief description, "
@@ -31,7 +31,7 @@ class ScreenwritingWorkflow(Workflow):
         )
         # Agent 3: Thematic Analyst - determines theme and value transitions using outline & characters
         thematic_task = PromptTask(
-            prompt_template=(
+            prompt=(
                 "You are a Thematic Analyst. Given the story outline:\n{{ parent_outputs['outline'] }}\n"
                 "and characters:\n{{ parent_outputs['characters'] }}\n\n"
                 "Identify the core theme or value at stake in this story, and the value change in each scene. For each scene in the outline, "
@@ -43,7 +43,7 @@ class ScreenwritingWorkflow(Workflow):
         )
         # Agent 4: Scene Shaper - writes full screenplay using outline, characters, and value transitions
         scene_task = PromptTask(
-            prompt_template=(
+            prompt=(
                 "You are a Screenwriter. Write the full screenplay based on the following:\n"
                 "- Premise: {{ args[0] }}\n"
                 "- Story Outline: {{ parent_outputs['outline'] }}\n"
@@ -128,4 +128,3 @@ if __name__ == "__main__":
     combined_output += (screenplay_text or "[Screenplay generation failed.]")
     # Print the combined output to console (for local run)
     print(combined_output)
-
