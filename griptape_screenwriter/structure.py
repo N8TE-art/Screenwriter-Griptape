@@ -35,10 +35,14 @@ class Screenplay(BaseModel):
 # --- AGENTS ---
 def build_plot_architect():
     prompt = (
-        "Respond ONLY with raw JSON. Do not include any explanations.\n"
-        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.\n"
-        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.\n"
-        "Return an object with keys 'logline' (string) and 'outline' (array of scene descriptions)."
+        "Respond ONLY with raw JSON. Do not include any explanations.
+"
+        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.
+"
+        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.
+"
+        "Return an object with keys: 'logline' (string), 'outline' (array of scene descriptions)."
+    ) and 'outline' (array of scene descriptions)."
     ) and 'outline' (array of scene descriptions)."
     ) and 'outline' (array of scene descriptions)."
     ) and 'outline' (array of scene descriptions).")
@@ -149,4 +153,5 @@ def run_workflow():
 
     workflow.output_task_id = scene_task.id
     return workflow
+
 
