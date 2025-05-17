@@ -1,7 +1,8 @@
-version: 1
-runtime: python3
-runtime_version: 3.11
-
+version: 1.0               # Schema version of this config
+runtime: python3           # Use Python runtime
+runtime_version: 3.11      # Python version (ensure compatibility with Griptape)
+build:
+  requirements_file: requirements.txt  # Install dependencies from requirements.txt
+  # (No custom build scripts needed; using default install process)
 run:
-  main_file: structure.py
-  entrypoint: run_workflow
+  main_file: structure.py  # Entry point for the structure execution
