@@ -3,7 +3,7 @@ import sys
 import os
 from griptape.structures import Workflow
 from griptape.tasks import StructureRunTask
-from griptape.drivers import OpenAiChatPromptDriver
+from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
 from pydantic import BaseModel, Field
 from typing import List
 
@@ -34,11 +34,13 @@ class Screenplay(BaseModel):
 
 # --- AGENTS ---
 def build_plot_architect():
-    prompt = (
-        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.\n"
-        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.\n"
-        "Respond in JSON with keys 'logline' (string) and 'outline' (array of scene descriptions)."
-    )
+    prompt = ("Respond ONLY with raw JSON. Do not include any explanations.
+" +
+        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.
+" +
+        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.
+" +
+        "Return an object with keys 'logline' (string) and 'outline' (array of scene descriptions).")
     input_schema = type("PlotInput", (BaseModel,), {"premise": (str, ...)})
     return StructureRunTask(
         id="plot_architect",
@@ -49,10 +51,12 @@ def build_plot_architect():
     )
 
 def build_character_designer():
-    prompt = (
-        "You are a Character Designer. Given the premise '{{ input.premise }}' and outline:\n{{ input.outline }}\n"
-        "Generate character profiles as JSON with fields: name, role, description, and arc."
-    )
+    prompt = ("Respond ONLY with raw JSON. Do not include any explanations.
+" +
+        "You are a Character Designer. Given the premise '{{ input.premise }}' and outline:
+{{ input.outline }}
+" +
+        "Generate character profiles as JSON with fields: name, role, description, and arc.")
     input_schema = type("CharInput", (BaseModel,), {
         "premise": (str, ...),
         "outline": (str, ...)
@@ -66,10 +70,14 @@ def build_character_designer():
     )
 
 def build_thematic_analyst():
-    prompt = (
-        "You are a Thematic Analyst. Given the outline:\n{{ input.outline }}\nand characters:\n{{ input.characters }}\n"
-        "List each scene's value change as JSON: scene, from_value, to_value."
-    )
+    prompt = ("Respond ONLY with raw JSON. Do not include any explanations.
+" +
+        "You are a Thematic Analyst. Given the outline:
+{{ input.outline }}
+and characters:
+{{ input.characters }}
+" +
+        "List each scene's value change as JSON: scene, from_value, to_value.")
     input_schema = type("ThemeInput", (BaseModel,), {
         "outline": (str, ...),
         "characters": (str, ...)
@@ -83,10 +91,15 @@ def build_thematic_analyst():
     )
 
 def build_scene_shaper():
-    prompt = (
-        "You are a Screenwriter. Write a full screenplay using:\nPremise: {{ input.premise }}\nOutline: {{ input.outline }}\nCharacters: {{ input.characters }}\nValue Transitions: {{ input.transitions }}\n"
-        "Return the complete script in one text block."
-    )
+    prompt = ("Respond ONLY with raw JSON. Do not include any explanations.
+" +
+        "You are a Screenwriter. Write a full screenplay using:
+Premise: {{ input.premise }}
+Outline: {{ input.outline }}
+Characters: {{ input.characters }}
+Value Transitions: {{ input.transitions }}
+" +
+        "Return the complete script in one text block.")
     input_schema = type("ScriptInput", (BaseModel,), {
         "premise": (str, ...),
         "outline": (str, ...),
