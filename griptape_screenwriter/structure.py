@@ -1,11 +1,11 @@
-import os
+import json
 import sys
-from typing import List
-from pydantic import BaseModel
-
+import os
 from griptape.structures import Workflow
 from griptape.tasks import StructureRunTask
 from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
+from pydantic import BaseModel, Field
+from typing import List
 
 # --- SCHEMAS ---
 class PlotOutline(BaseModel):
@@ -142,4 +142,21 @@ def run_workflow():
     )
 
     workflow.output_task_id = scene_task.id
+
+    def debug(task_id, label):
+        task = workflow.find_task_by_id(task_id)
+        if task and task.output:
+            print(f"
+=== {label} Output ===
+{task.output.value}
+")
+        else:
+            print(f"
+=== {label} Output: None or Invalid ===")
+
+    debug(plot_task.id, "PLOT")
+    debug(char_task.id, "CHARACTERS")
+    debug(theme_task.id, "THEME")
+    debug(scene_task.id, "SCREENPLAY")
+
     return workflow
