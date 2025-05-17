@@ -1,0 +1,7 @@
+version: 1
+runtime: python3
+runtime_version: 3.11
+
+run:
+  main_file: structure.py
+  entrypoint: run_workflow
