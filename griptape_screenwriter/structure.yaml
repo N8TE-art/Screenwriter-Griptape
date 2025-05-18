@@ -1,10 +1,66 @@
-version: 1.0
-runtime: python3
-runtime_version: 3.11
+structure:
+  id: screenwriter_pipeline
+  description: >
+    A Griptape structure that chains four agents (Plot Architect, Character Designer,
+    Thematic Analyst, Scene Shaper) using Robert McKee’s story principles and a shared StoryContext.
 
-build:
-  requirements_file: requirements.txt
+  inputs:
+    - name: premise
+      description: "Story premise (logline)"
+      required: true
+      type: string
 
-run:
-  main_file: structure.py
-  entrypoint: run_workflow
+  tasks:
+    - id: plot_architect
+      type: prompt
+      input_template: |
+        {{ args[0] }}
+      driver:
+        type: openai-chat
+        config:
+          model: gpt-4
+          temperature: 0.3
+      output_schema: PlotOutline
+
+    - id: character_designer
+      type: prompt
+      input_template: |
+        {{ tasks.plot_architect.output }}
+      driver:
+        type: openai-chat
+        config:
+          model: gpt-4
+          temperature: 0.3
+      output_schema: CharacterList
+
+    - id: thematic_analyst
+      type: prompt
+      input_template: |
+        {
+          "outline": {{ tasks.plot_architect.output }},
+          "characters": {{ tasks.character_designer.output }}
+        }
+      driver:
+        type: openai-chat
+        config:
+          model: gpt-4
+          temperature: 0
+      output_schema: StoryAnalysis
+
+    - id: scene_shaper
+      type: prompt
+      input_template: |
+        {
+          "premise": {{ args[0] }},
+          "outline": {{ tasks.plot_architect.output }},
+          "characters": {{ tasks.character_designer.output }},
+          "notes": {{ tasks.thematic_analyst.output.notes }}
+        }
+      driver:
+        type: openai-chat
+        config:
+          model: gpt-4
+          temperature: 0.7
+      output_schema: Screenplay
+
+  output_task: scene_shaper
