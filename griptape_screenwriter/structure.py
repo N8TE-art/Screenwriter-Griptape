@@ -143,6 +143,7 @@ def run_workflow():
 
     workflow.output_task_id = scene_task.id
 
+    # Debug function to inspect task outputs
     def debug(task_id, label):
         task = workflow.find_task_by_id(task_id)
         if task and task.output:
@@ -150,10 +151,28 @@ def run_workflow():
         else:
             print("\n=== {} Output: None or Invalid ===".format(label))
 
+    # Run the workflow
+    workflow.run()
+
+    # Debug outputs
+    debug(plot_task.id, "PLOT")
+    debug(char_task.id, "CHARACTERS")
+    debug(theme_task.id, "THEME")
+    debug(scene_task.id, "SC
+    def debug(task_id, label):
+        task = workflow.find_task_by_id(task_id)
+        if task and task.output:
+            print("
+=== {} Output ===
+{}
+".format(label, task.output.value))
+        else:
+            print("
+=== {} Output: None or Invalid ===".format(label))
+
     debug(plot_task.id, "PLOT")
     debug(char_task.id, "CHARACTERS")
     debug(theme_task.id, "THEME")
     debug(scene_task.id, "SCREENPLAY")
 
     return workflow
-
