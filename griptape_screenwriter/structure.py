@@ -7,7 +7,14 @@ from griptape.structures import Agent
 
 # PromptStack import is version‑sensitive: utils in 0.23.x, structures in >=0.24
 try:
-    from griptape.structures import PromptStack  # 0.24+
+    # Griptape ≥0.24 (future): PromptStack re-exported under griptape.structures
+    from griptape.structures import PromptStack  # type: ignore
+except ImportError:
+    try:
+        # Griptape 0.23.x stable location
+        from griptape.common.prompt_stack import PromptStack
+    except ImportError:
+        from griptape.utils import PromptStack  # Legacy fallback  # 0.24+
 except ImportError:  # fallback for 0.23.x
     from griptape.utils import PromptStack
 
@@ -166,3 +173,4 @@ if __name__ == "__main__":
         print("\nSCENE 1 PREVIEW:\n", story.screenplay_scenes[0]["content"][:400])
     else:
         print("\nNo scenes generated.")
+
