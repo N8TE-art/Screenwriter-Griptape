@@ -1,7 +1,8 @@
 import json
 from typing import List, Optional
 from pydantic import BaseModel, ValidationError
-from griptape.structures import Agent, PromptStack
+from griptape.structures import Agent
+from griptape.utils import PromptStack
 from griptape.drivers import OpenAiChatPromptDriver
 
 # Shared schema using Pydantic
