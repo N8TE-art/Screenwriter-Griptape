@@ -2,7 +2,7 @@ import json
 import sys
 import os
 from griptape.structures import Workflow
-from griptape.tasks import StructureRunTask
+from griptape.tasks import PromptTask
 from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
 from pydantic import BaseModel, Field
 from typing import List
@@ -57,7 +57,7 @@ def build_plot_architect():
         "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.\n"
         "Return an object with keys: 'logline' (string), 'outline' (array of scene descriptions)."
     )
-    return StructureRunTask(
+    return PromptTask(
         id="plot_architect",
         prompt_template=prompt,
         input_schema=PlotInput,
@@ -71,7 +71,7 @@ def build_character_designer():
         "You are a Character Designer. Given the premise '{{ input.premise }}' and outline:\n{{ input.outline }}\n"
         "Generate character profiles as JSON with fields: name, role, description, and arc."
     )
-    return StructureRunTask(
+    return PromptTask(
         id="character_designer",
         prompt_template=prompt,
         input_schema=CharInput,
@@ -85,7 +85,7 @@ def build_thematic_analyst():
         "You are a Thematic Analyst. Given the outline:\n{{ input.outline }}\nand characters:\n{{ input.characters }}\n"
         "List each scene's value change as JSON: scene, from_value, to_value."
     )
-    return StructureRunTask(
+    return PromptTask(
         id="thematic_analyst",
         prompt_template=prompt,
         input_schema=ThemeInput,
@@ -103,7 +103,7 @@ def build_scene_shaper():
         "Value Transitions: {{ input.transitions }}\n"
         "Return the complete script in one text block."
     )
-    return StructureRunTask(
+    return PromptTask(
         id="scene_shaper",
         prompt_template=prompt,
         input_schema=ScriptInput,
@@ -163,7 +163,4 @@ def run_workflow():
 
     debug(plot_task.id, "PLOT")
     debug(char_task.id, "CHARACTERS")
-    debug(theme_task.id, "THEME")
-    debug(scene_task.id, "SCREENPLAY")
-
-    return workflow
+    debug(theme_task.id, "
