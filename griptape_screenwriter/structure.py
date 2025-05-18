@@ -5,7 +5,7 @@ def build_workflow():
     workflow = Workflow()
 
     # TASK 1: Plot Architect
-    plot_task = workflow.add_task(build_plot_architect(), input={"premise": "{{ args[0] }}"})
+    plot_task = workflow.add_task(build_plot_architect(), input={"premise": "{{args[0]}}"})
 
     # TASK 2: Character Designer
     char_task = workflow.add_task(
