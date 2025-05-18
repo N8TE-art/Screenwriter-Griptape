@@ -24,7 +24,7 @@ structure:
         config:
           model: gpt-4
           temperature: 0.3
-      output_schema: PlotOutline
+      output_schema: StoryContext
 
     - id: character_designer
       type: prompt
@@ -35,21 +35,21 @@ structure:
         config:
           model: gpt-4
           temperature: 0.3
-      output_schema: CharacterList
+      output_schema: StoryContext
 
     - id: thematic_analyst
       type: prompt
       input_template: |
         {
           "outline": {{ tasks.plot_architect.output | to_json }},
-          "characters": {{ tasks.character_designer.output | to_json }}
+          "characters": {{ tasks.character_designer.output.characters | to_json }}
         }
       driver:
         type: openai-chat
         config:
           model: gpt-4
           temperature: 0
-      output_schema: StoryAnalysis
+      output_schema: StoryContext
 
     - id: scene_shaper
       type: prompt
@@ -57,7 +57,7 @@ structure:
         {
           "premise": {{ args[0] | to_json }},
           "outline": {{ tasks.plot_architect.output | to_json }},
-          "characters": {{ tasks.character_designer.output | to_json }},
+          "characters": {{ tasks.character_designer.output.characters | to_json }},
           "notes": {{ tasks.thematic_analyst.output.notes | to_json }}
         }
       driver:
@@ -65,10 +65,10 @@ structure:
         config:
           model: gpt-4
           temperature: 0.7
-      output_schema: Screenplay
+      output_schema: StoryContext
 
   output_task: scene_shaper
 
 run:
   main_file: structure.py
-  entrypoint: structure:run_workflow  # or structure:build_workflow if you rename the function
+  entrypoint: structure:build_workflow
