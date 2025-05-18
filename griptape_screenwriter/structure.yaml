@@ -1,6 +1,6 @@
 version: 1.0
 runtime: python3
-runtime_version: 3.10  # Using Python 3.10 environment
+runtime_version: 3.11 # Using Python 3.10 environment
 build:
   requirements_file: requirements.txt
   cache_build_dependencies:
