@@ -1,183 +1,195 @@
-import json
+"""
+structure.py – Griptape 0.23.x Cloud‐ready
+-----------------------------------------
+Pipeline tasks:
+
+1. Plot Architect    -> Outline JSON
+2. Character Designer-> Characters JSON
+3. Thematic Analyst  -> Notes   JSON
+4. Scene Shaper      -> Scenes  JSON
+
+After the run, we collect all outputs and save them
+to /outputs/final_story.json so Griptape Cloud exposes
+the file for download.
+"""
 import os
-import re
-from typing import List, Optional
-from pydantic import BaseModel, ValidationError
-from griptape.structures import Agent
-try:
-    from griptape.structures import PromptStack  # primary location in 0.23 wheel
-except ImportError:
-    from griptape.utils import PromptStack      # fallback for older builds
+import sys
+import json
+from griptape.structures import Pipeline
+from griptape.tasks import PromptTask
 from griptape.drivers import OpenAiChatPromptDriver
+from griptape.config import (
+    StructureConfig,
+    StructureGlobalDriversConfig,
+)
 
-# -----------------------------------------------------------------------------
-# Environment check
-# -----------------------------------------------------------------------------
-assert os.getenv("OPENAI_API_KEY"), "OPENAI_API_KEY environment variable not set"
+# ---------------------------------------------------------------------------
+# 0‧ Safety checks
+# ---------------------------------------------------------------------------
+API_KEY = os.getenv("OPENAI_API_KEY")
+if not API_KEY:
+    raise EnvironmentError("OPENAI_API_KEY must be set in Griptape Cloud env vars")
 
-# -----------------------------------------------------------------------------
-# Shared Pydantic models
-# -----------------------------------------------------------------------------
-class Scene(BaseModel):
-    act: int
-    number: int
-    description: str
-    conflict: str
-    value_change: str
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4")  # change if you prefer gpt-3.5-turbo
 
-class Outline(BaseModel):
-    title: str
-    theme: str
-    protagonist_desire: str
-    protagonist_need: str
-    scenes: List[Scene]
-
-class Character(BaseModel):
-    name: str
-    role: str
-    backstory: str
-    desire: str
-    need: str
-    arc: Optional[str] = "Unknown"
-
-class StoryData(BaseModel):
-    premise: Optional[str] = None
-    outline: Optional[Outline] = None
-    characters: List[Character] = []
-    analysis_notes: List[str] = []
-    screenplay_scenes: List[dict] = []
-
-# -----------------------------------------------------------------------------
-# Utilities
-# -----------------------------------------------------------------------------
-JSON_RE = re.compile(r"\{[\s\S]*?}\s*$")
-
-def clean_json(raw: str) -> str:
-    """Strip markdown fences and extract first JSON object."""
-    raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```")
-    match = JSON_RE.search(raw)
-    if not match:
-        raise ValueError("LLM response contained no valid JSON object")
-    return match.group(0)
-
-def new_driver(model: str | None = None, temperature: float = 0.3) -> OpenAiChatPromptDriver:
-    return OpenAiChatPromptDriver(model=model or os.getenv("OPENAI_MODEL", "gpt-4"), temperature=temperature)
-
-# -----------------------------------------------------------------------------
-# PromptStack helper guaranteed for Griptape 0.23.x
-# -----------------------------------------------------------------------------
-
-class _UserMsg:
-    """Minimal user message with required callables for the driver."""
-    def __init__(self, content: str):
-        self.content = content
-    def is_system(self):
-        return False
-    def is_user(self):
-        return True
-    def is_assistant(self):
-        return False
-
-
-def stack_with_message(prompt: str) -> PromptStack:
-    stack = PromptStack()
-    if hasattr(stack, "add_user_message"):
-        stack.add_user_message(prompt)
-    elif hasattr(stack, "add_message"):
-        try:
-            stack.add_message(prompt, "user")
-        except TypeError:
-            stack.add_message("user", prompt)
-    else:
-        if hasattr(stack, "inputs") and isinstance(stack.inputs, list):
-            stack.inputs.append(_UserMsg(prompt))
-        else:
-            raise AttributeError("PromptStack in this version cannot accept messages")
-    return stack
-
-# -----------------------------------------------------------------------------
-# Agents
-# -----------------------------------------------------------------------------
-class PlotArchitectAgent(Agent):
-    def run(self, data: StoryData) -> StoryData:
-        prompt = (
-            "You are a Plot Architect AI. Develop a screenplay outline using Robert McKee's Three‑Act structure.\n"
-            f"Premise: \"{data.premise}\"\n"
-            "Each scene must include: act, number, description, conflict, value_change.\n"
-            "Also include: title, theme, protagonist_desire, protagonist_need.\n"
-            "Respond ONLY with a JSON object."
+# ---------------------------------------------------------------------------
+# 1‧ Build the Pipeline with the official 0.23 config
+# ---------------------------------------------------------------------------
+pipe = Pipeline(
+    config=StructureConfig(
+        global_drivers=StructureGlobalDriversConfig(
+            prompt_driver=OpenAiChatPromptDriver(api_key=API_KEY, model=MODEL, temperature=0.3)
         )
-        response = new_driver().run(stack_with_message(prompt))
-        try:
-            outline = Outline.parse_raw(response)
-        except ValidationError:
-            outline = Outline.parse_raw(clean_json(response))
-        return StoryData(premise=data.premise, outline=outline)
+    )
+)
 
-class CharacterDesignerAgent(Agent):
-    def run(self, data: StoryData) -> StoryData:
-        assert data.outline, "PlotArchitectAgent did not produce an outline"
-        prompt = (
-            "You are a Character Designer AI.\n"
-            f"Title: {data.outline.title}\n"
-            f"Theme: {data.outline.theme}\n"
-            f"Protagonist's Desire: {data.outline.protagonist_desire}\n"
-            f"Protagonist's Need: {data.outline.protagonist_need}\n"
-            "Design 3‑5 characters (name, role, backstory, desire, need, arc).\n"
-            "Return { \"characters\": [ ... ] }."
-        )
-        response = new_driver().run(stack_with_message(prompt))
-        chars_json = json.loads(clean_json(response)).get("characters", [])
-        if not chars_json:
-            raise ValueError("CharacterDesignerAgent response missing 'characters'")
-        characters = [Character.parse_obj(c) for c in chars_json]
-        return StoryData(premise=data.premise, outline=data.outline, characters=characters)
+# ---------------------------------------------------------------------------
+# 2‧ Add the four PromptTasks with your original prompts
+# ---------------------------------------------------------------------------
 
-class ThematicAnalystAgent(Agent):
-    def run(self, data: StoryData) -> StoryData:
-        assert data.characters, "CharacterDesignerAgent produced no characters"
-        prompt = (
-            "You are a Thematic Analyst AI. Review the outline and characters for coherence.\n"
-            "Return { \"issues_found\": bool, \"notes\": [...] }.\n"
-            f"Outline: {data.outline.json()}\n"
-            f"Characters: {json.dumps([c.dict() for c in data.characters])}"
-        )
-        response = new_driver(temperature=0).run(stack_with_message(prompt))
-        analysis = json.loads(clean_json(response))
-        return StoryData(premise=data.premise, outline=data.outline, characters=data.characters, analysis_notes=analysis.get("notes", []))
+# -- 1 Plot Architect --------------------------------------------------------
+pipe.add_task(
+    PromptTask(
+        id="plot_architect",
+        prompt="""
+You are a Plot Architect AI. Develop a screenplay outline using Robert McKee's Story structure.
 
-class SceneShaperAgent(Agent):
-    def run(self, data: StoryData) -> StoryData:
-        prompt = (
-            "You are a Scene Shaper AI. Write screenplay scenes based on the outline, characters, and analyst notes.\n"
-            "Return { \"scenes\": [ {\"number\": int, \"content\": \"...\"}, ... ] }.\n"
-            f"Outline: {data.outline.json()}\n"
-            f"Characters: {json.dumps([c.dict() for c in data.characters])}\n"
-            f"Notes: {json.dumps(data.analysis_notes)}"
-        )
-        response = new_driver(temperature=0.7).run(stack_with_message(prompt))
-        scenes = json.loads(clean_json(response)).get("scenes", [])
-        return StoryData(premise=data.premise, outline=data.outline, characters=data.characters, analysis_notes=data.analysis_notes, screenplay_scenes=scenes)
+### Context:
+Premise: {{ args[0] }}
 
-# -----------------------------------------------------------------------------
-# Pipeline orchestrator
-# -----------------------------------------------------------------------------
+### Instructions:
+Follow the Three-Act structure:
 
-def run_story_pipeline(premise: str) -> StoryData:
-    data = StoryData(premise=premise)
-    data = PlotArchitectAgent().run(data)
-    data = CharacterDesignerAgent().run(data)
-    data = ThematicAnalystAgent().run(data)
-    data = SceneShaperAgent().run(data)
-    return data
+- **Act I (Setup):** Inciting Incident, protagonist Desire & Need.
+- **Act II (Conflict):** Rising stakes, midpoint, crisis forcing Need.
+- **Act III (Resolution):** Climax & transformation.
 
+For each scene include:
+- `act`, `number`, `description`, `conflict`, `value_change`
+
+Also output:
+- `title`, `theme`, `protagonist_desire`, `protagonist_need`
+
+### Output:
+Respond **ONLY** with a valid JSON object:
+{
+  "title": "...",
+  "theme": "...",
+  "protagonist_desire": "...",
+  "protagonist_need": "...",
+  "scenes": [
+    { "act": 1, "number": 1, "description": "...", "conflict": "...", "value_change": "..." }
+  ]
+}
+""".strip()
+    )
+)
+
+# -- 2 Character Designer ----------------------------------------------------
+pipe.add_task(
+    PromptTask(
+        id="character_designer",
+        prompt="""
+You are a Character Designer AI.
+
+### Outline:
+{{ parent_output }}
+
+### Instructions:
+Create 3-5 characters who embody or challenge the theme.
+Each character must have:
+- `name`, `role`, `backstory`, `desire`, `need`, `arc`
+
+### Output:
+Respond **ONLY** with:
+{ "characters": [ { ... }, ... ] }
+""".strip()
+    )
+)
+
+# -- 3 Thematic Analyst ------------------------------------------------------
+pipe.add_task(
+    PromptTask(
+        id="thematic_analyst",
+        prompt="""
+You are a Thematic Analyst AI.
+
+### Outline:
+{{ tasks.plot_architect.output }}
+
+### Characters:
+{{ tasks.character_designer.output }}
+
+### Instructions:
+For each scene check:
+- conflict clarity
+- value change
+- thematic relevance
+
+Also check character arcs.
+
+### Output:
+{ "issues_found": true|false, "notes": ["...", "..."] }
+""".strip()
+    )
+)
+
+# -- 4 Scene Shaper ----------------------------------------------------------
+pipe.add_task(
+    PromptTask(
+        id="scene_shaper",
+        prompt="""
+You are a Scene Shaper AI.
+
+### Premise
+{{ args[0] }}
+
+### Outline
+{{ tasks.plot_architect.output }}
+
+### Characters
+{{ tasks.character_designer.output }}
+
+### Analyst Notes
+{{ tasks.thematic_analyst.output }}
+
+### Instructions
+Write screenplay scenes (INT/EXT HEADINGS, action, dialogue).
+Show conflict and value change; weave the theme via subtext.
+
+### Output
+{ "scenes": [ { "number": 1, "content": "Scene text..." }, ... ] }
+""".strip(),
+        # Slightly higher creativity for prose
+        driver=OpenAiChatPromptDriver(api_key=API_KEY, model=MODEL, temperature=0.7),
+    )
+)
+
+# ---------------------------------------------------------------------------
+# 3‧ Execute when run by Griptape Cloud
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    premise = "A girl discovers her memories have been encoded into a planetary AI network."
-    final_story = run_story_pipeline(premise)
-    print("TITLE:", final_story.outline.title)
-    print("CHARACTERS:", [c.dict() for c in final_story.characters])
-    print("NOTES:", final_story.analysis_notes)
-    if final_story.screenplay_scenes:
-        print("SCENE 1 PREVIEW:\n", final_story.screenplay_scenes[0]["content"][:400])
-    else:
-        print("No scenes generated.")
+    # Pass along every CLI arg Griptape supplies (the first is premise)
+    result = pipe.run(*sys.argv[1:])
+
+    # Collect outputs
+    outline_json   = pipe.tasks.plot_architect.output.value
+    chars_json     = pipe.tasks.character_designer.output.value
+    notes_json     = pipe.tasks.thematic_analyst.output.value
+    scenes_json    = pipe.tasks.scene_shaper.output.value
+
+    # Build dict for file
+    story_bundle = {
+        "outline":        json.loads(outline_json),
+        "characters":     json.loads(chars_json),
+        "analysis_notes": json.loads(notes_json),
+        "scenes":         json.loads(scenes_json)
+    }
+
+    # Write to Griptape Cloud /outputs directory
+    os.makedirs("/outputs", exist_ok=True)
+    with open("/outputs/final_story.json", "w") as fp:
+        json.dump(story_bundle, fp, indent=2)
+
+    # Optional console echo
+    print("✅ Saved screenplay to /outputs/final_story.json")
