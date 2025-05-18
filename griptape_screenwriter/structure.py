@@ -6,7 +6,7 @@ structure:
   id: screenwriter_pipeline
   description: >
     A Griptape structure that chains four prebuilt agents (Plot Architect, Character Designer,
-    Thematic Analyst, Scene Shaper) using Robert McKee’s story principles and a shared StoryContext.
+    Thematic Analyst, Scene Shaper) using Robert McKee's story principles and a shared StoryContext.
 
   inputs:
     - name: premise
