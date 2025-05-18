@@ -22,3 +22,8 @@ class StoryContext(BaseModel):  # 👈 Unifying Schema
     notes: Optional[List[str]] = []
     issues_found: Optional[bool] = False
     screenplay: Optional[List[SceneScript]] = []
+
+def build_workflow():
+    # build tasks...
+    workflow.output_task_id = scene_task.id
+    return workflow.run()
