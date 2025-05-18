@@ -1,3 +1,7 @@
+version: 1
+runtime: python
+runtime_version: "3.11"
+
 structure:
   id: screenwriter_pipeline
   description: >
@@ -64,3 +68,6 @@ structure:
       output_schema: Screenplay
 
   output_task: scene_shaper
+
+run:
+  entrypoint: structure:build_workflow
