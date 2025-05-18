@@ -71,28 +71,42 @@ def new_driver(model: str = None, temperature: float = 0.3) -> OpenAiChatPromptD
     return OpenAiChatPromptDriver(model=model or os.getenv("OPENAI_MODEL", "gpt-4"), temperature=temperature)
 
 
-def stack_with_message(prompt: str) -> PromptStack:
-    """Return a PromptStack containing a single user message in the most
-    version‑agnostic way possible (0.22 → 0.24)."""
-    # Preferred shortcut if factory exists
-    if hasattr(PromptStack, "from_artifact"):
-        return PromptStack.from_artifact(prompt)
+from types import SimpleNamespace
 
+def stack_with_message(prompt: str) -> PromptStack:
+    """Robustly insert a user prompt into whichever PromptStack variant exists
+    in the installed Griptape version (0.22 → 0.24)."""
     stack = PromptStack()
-    # Newer helper (0.23+)
+
+    # Most recent helper (0.23+) --------------------------------------------
     if hasattr(stack, "add_user_message"):
         stack.add_user_message(prompt)
-    # Older generic helper (pre‑0.23 nightly)
-    elif hasattr(stack, "add_message"):
-        stack.add_message(prompt, "user")
+        return stack
+
+    # Older helper names ------------------------------------------------------
+    if hasattr(stack, "add_message"):
+        try:
+            # Signature order varies (content, role) vs (role, content)
+            stack.add_message(prompt, "user")
+        except TypeError:
+            stack.add_message("user", prompt)
+        return stack
+
+    # Fallback: directly append to .inputs or .messages ----------------------
+        # Fallback: construct a lightweight message-like object ------------------
+    message_obj = SimpleNamespace(
+        content=prompt,
+        role="user",
+        is_system=False,
+        is_user=True,
+        is_assistant=False
+    )
+    if hasattr(stack, "inputs") and isinstance(stack.inputs, list):
+        stack.inputs.append(message_obj)
+    elif hasattr(stack, "messages") and isinstance(stack.messages, list):
+        stack.messages.append(message_obj)
     else:
-        # Ultimate fallback: try .inputs list used by drivers
-        if hasattr(stack, "messages"):
-            stack.messages.append({"role": "user", "content": prompt})
-        elif hasattr(stack, "inputs"):
-            stack.inputs.append(prompt)  # very old prototype
-        else:
-            raise AttributeError("PromptStack has no method to add a user message in this Griptape version")
+        raise AttributeError("PromptStack has no recognized container (inputs/messages)")
     return stack
 
 # -----------------------------------------------------------------------------
