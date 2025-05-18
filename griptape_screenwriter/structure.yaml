@@ -1,9 +1,10 @@
-```yaml
-version: 1.0               # Config schema version:contentReference[oaicite:10]{index=10}
-runtime: python3           # Use Python runtime:contentReference[oaicite:11]{index=11}
-runtime_version: 3.11      # Python version for the environment:contentReference[oaicite:12]{index=12}
+version: 1.0
+runtime: python3
+runtime_version: 3.11
+
 build:
-  requirements_file: requirements.txt   # Install dependencies from this file:contentReference[oaicite:13]{index=13}
+  requirements_file: requirements.txt
+
 run:
-  main_file: structure.py  # Entry point script for the structure:contentReference[oaicite:14]{index=14}
-```yaml
+  main_file: structure.py
+  entrypoint: run_workflow
