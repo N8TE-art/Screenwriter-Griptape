@@ -4,8 +4,11 @@ import re
 from typing import List, Optional
 from pydantic import BaseModel, ValidationError
 from griptape.structures import Agent
-from griptape.common.prompt_stack import PromptStack  # stable 0.23.x location
-from griptape.schemas import UserMessage             # official user-role message
+try:
+    from griptape.structures import PromptStack  # primary location in 0.23 wheel
+except ImportError:
+    from griptape.utils import PromptStack      # fallback for older builds
+from griptape.schemas import UserMessage             # official user‑role message
 from griptape.drivers import OpenAiChatPromptDriver
 
 # -----------------------------------------------------------------------------
@@ -76,7 +79,7 @@ def stack_with_message(prompt: str) -> PromptStack:
 class PlotArchitectAgent(Agent):
     def run(self, data: StoryData) -> StoryData:
         prompt = (
-            "You are a Plot Architect AI. Develop a screenplay outline using Robert McKee's Three-Act structure.\n"
+            "You are a Plot Architect AI. Develop a screenplay outline using Robert McKee's Three‑Act structure.\n"
             f"Premise: \"{data.premise}\"\n"
             "Each scene must include: act, number, description, conflict, value_change.\n"
             "Also include: title, theme, protagonist_desire, protagonist_need.\n"
@@ -98,7 +101,7 @@ class CharacterDesignerAgent(Agent):
             f"Theme: {data.outline.theme}\n"
             f"Protagonist's Desire: {data.outline.protagonist_desire}\n"
             f"Protagonist's Need: {data.outline.protagonist_need}\n"
-            "Design 3-5 characters (name, role, backstory, desire, need, arc).\n"
+            "Design 3‑5 characters (name, role, backstory, desire, need, arc).\n"
             "Return { \"characters\": [ ... ] }."
         )
         response = new_driver().run(stack_with_message(prompt))
@@ -156,3 +159,4 @@ if __name__ == "__main__":
         print("SCENE 1 PREVIEW:\n", final_story.screenplay_scenes[0]["content"][:400])
     else:
         print("No scenes generated.")
+
