@@ -1,5 +1,5 @@
-version: 1
-runtime: python
+version: "1.0"
+runtime: python3
 runtime_version: "3.11"
 
 structure:
@@ -70,4 +70,5 @@ structure:
   output_task: scene_shaper
 
 run:
+  main_file: structure.py
   entrypoint: structure:build_workflow
