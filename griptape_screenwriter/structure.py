@@ -4,24 +4,14 @@ import re
 from typing import List, Optional
 from pydantic import BaseModel, ValidationError
 from griptape.structures import Agent
-
-# -----------------------------------------------------------------------------
-# PromptStack compatibility across Griptape versions (0.23.x stable preferred)
-# -----------------------------------------------------------------------------
-try:
-    from griptape.common.prompt_stack import PromptStack  # 0.23.x
-except ImportError:
-    try:
-        from griptape.structures import PromptStack  # ≥0.24 (dev/nightly)
-    except ImportError:
-        from griptape.utils import PromptStack  # legacy fallback
-
+from griptape.common.prompt_stack import PromptStack  # stable 0.23.x location
+from griptape.schemas import UserMessage             # official user-role message
 from griptape.drivers import OpenAiChatPromptDriver
 
 # -----------------------------------------------------------------------------
-# Environment sanity check
+# Environment check
 # -----------------------------------------------------------------------------
-assert os.getenv("OPENAI_API_KEY"), "Missing OPENAI_API_KEY environment variable"
+assert os.getenv("OPENAI_API_KEY"), "OPENAI_API_KEY environment variable not set"
 
 # -----------------------------------------------------------------------------
 # Shared Pydantic models
@@ -56,67 +46,38 @@ class StoryData(BaseModel):
     screenplay_scenes: List[dict] = []
 
 # -----------------------------------------------------------------------------
-# Helper utilities
+# Utilities
 # -----------------------------------------------------------------------------
-JSON_REGEX = re.compile(r"\{[\s\S]*}?")
+JSON_RE = re.compile(r"\{[\s\S]*?}\s*$")
 
 def clean_json(raw: str) -> str:
-    raw = raw.strip().lstrip("```json").lstrip("```")
-    match = JSON_REGEX.search(raw)
+    """Strip markdown fences and extract first JSON object."""
+    raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```")
+    match = JSON_RE.search(raw)
     if not match:
-        raise ValueError("No JSON object found in LLM response")
+        raise ValueError("LLM response contained no valid JSON object")
     return match.group(0)
 
-def new_driver(model: str = None, temperature: float = 0.3) -> OpenAiChatPromptDriver:
+def new_driver(model: str | None = None, temperature: float = 0.3) -> OpenAiChatPromptDriver:
     return OpenAiChatPromptDriver(model=model or os.getenv("OPENAI_MODEL", "gpt-4"), temperature=temperature)
 
-
-from types import SimpleNamespace
+# -----------------------------------------------------------------------------
+# PromptStack helper guaranteed for Griptape 0.23.x
+# -----------------------------------------------------------------------------
 
 def stack_with_message(prompt: str) -> PromptStack:
-    """Robustly insert a user prompt into whichever PromptStack variant exists
-    in the installed Griptape version (0.22 → 0.24)."""
     stack = PromptStack()
-
-    # Most recent helper (0.23+) --------------------------------------------
-    if hasattr(stack, "add_user_message"):
-        stack.add_user_message(prompt)
-        return stack
-
-    # Older helper names ------------------------------------------------------
-    if hasattr(stack, "add_message"):
-        try:
-            # Signature order varies (content, role) vs (role, content)
-            stack.add_message(prompt, "user")
-        except TypeError:
-            stack.add_message("user", prompt)
-        return stack
-
-    # Fallback: directly append to .inputs or .messages ----------------------
-        # Fallback: construct a lightweight message-like object ------------------
-    message_obj = SimpleNamespace(
-        content=prompt,
-        role="user",
-        is_system=False,
-        is_user=True,
-        is_assistant=False
-    )
-    if hasattr(stack, "inputs") and isinstance(stack.inputs, list):
-        stack.inputs.append(message_obj)
-    elif hasattr(stack, "messages") and isinstance(stack.messages, list):
-        stack.messages.append(message_obj)
-    else:
-        raise AttributeError("PromptStack has no recognized container (inputs/messages)")
+    stack.add_message(UserMessage(content=prompt))
     return stack
 
 # -----------------------------------------------------------------------------
 # Agents
 # -----------------------------------------------------------------------------
 class PlotArchitectAgent(Agent):
-    def run(self, input_data: StoryData) -> StoryData:
+    def run(self, data: StoryData) -> StoryData:
         prompt = (
             "You are a Plot Architect AI. Develop a screenplay outline using Robert McKee's Three-Act structure.\n"
-            f"Premise: \"{input_data.premise}\"\n"
+            f"Premise: \"{data.premise}\"\n"
             "Each scene must include: act, number, description, conflict, value_change.\n"
             "Also include: title, theme, protagonist_desire, protagonist_need.\n"
             "Respond ONLY with a JSON object."
@@ -126,52 +87,52 @@ class PlotArchitectAgent(Agent):
             outline = Outline.parse_raw(response)
         except ValidationError:
             outline = Outline.parse_raw(clean_json(response))
-        return StoryData(premise=input_data.premise, outline=outline)
+        return StoryData(premise=data.premise, outline=outline)
 
 class CharacterDesignerAgent(Agent):
-    def run(self, input_data: StoryData) -> StoryData:
-        assert input_data.outline, "PlotArchitectAgent failed to produce outline"
+    def run(self, data: StoryData) -> StoryData:
+        assert data.outline, "PlotArchitectAgent did not produce an outline"
         prompt = (
             "You are a Character Designer AI.\n"
-            f"Title: {input_data.outline.title}\n"
-            f"Theme: {input_data.outline.theme}\n"
-            f"Protagonist's Desire: {input_data.outline.protagonist_desire}\n"
-            f"Protagonist's Need: {input_data.outline.protagonist_need}\n"
-            "Design 3‑5 characters (name, role, backstory, desire, need, arc) that reflect or challenge the theme.\n"
-            "Return { \"characters\": [ ... ] }"
+            f"Title: {data.outline.title}\n"
+            f"Theme: {data.outline.theme}\n"
+            f"Protagonist's Desire: {data.outline.protagonist_desire}\n"
+            f"Protagonist's Need: {data.outline.protagonist_need}\n"
+            "Design 3-5 characters (name, role, backstory, desire, need, arc).\n"
+            "Return { \"characters\": [ ... ] }."
         )
         response = new_driver().run(stack_with_message(prompt))
         chars_json = json.loads(clean_json(response)).get("characters", [])
         if not chars_json:
-            raise ValueError("CharacterDesignerAgent: missing 'characters' in response")
+            raise ValueError("CharacterDesignerAgent response missing 'characters'")
         characters = [Character.parse_obj(c) for c in chars_json]
-        return StoryData(premise=input_data.premise, outline=input_data.outline, characters=characters)
+        return StoryData(premise=data.premise, outline=data.outline, characters=characters)
 
 class ThematicAnalystAgent(Agent):
-    def run(self, input_data: StoryData) -> StoryData:
-        assert input_data.characters, "CharacterDesignerAgent returned empty characters"
+    def run(self, data: StoryData) -> StoryData:
+        assert data.characters, "CharacterDesignerAgent produced no characters"
         prompt = (
             "You are a Thematic Analyst AI. Review the outline and characters for coherence.\n"
             "Return { \"issues_found\": bool, \"notes\": [...] }.\n"
-            f"Outline: {input_data.outline.json()}\n"
-            f"Characters: {json.dumps([c.dict() for c in input_data.characters])}"
+            f"Outline: {data.outline.json()}\n"
+            f"Characters: {json.dumps([c.dict() for c in data.characters])}"
         )
         response = new_driver(temperature=0).run(stack_with_message(prompt))
         analysis = json.loads(clean_json(response))
-        return StoryData(premise=input_data.premise, outline=input_data.outline, characters=input_data.characters, analysis_notes=analysis.get("notes", []))
+        return StoryData(premise=data.premise, outline=data.outline, characters=data.characters, analysis_notes=analysis.get("notes", []))
 
 class SceneShaperAgent(Agent):
-    def run(self, input_data: StoryData) -> StoryData:
+    def run(self, data: StoryData) -> StoryData:
         prompt = (
-            "You are a Scene Shaper AI. Use the outline, characters, and analyst notes to write screenplay scenes.\n"
+            "You are a Scene Shaper AI. Write screenplay scenes based on the outline, characters, and analyst notes.\n"
             "Return { \"scenes\": [ {\"number\": int, \"content\": \"...\"}, ... ] }.\n"
-            f"Outline: {input_data.outline.json()}\n"
-            f"Characters: {json.dumps([c.dict() for c in input_data.characters])}\n"
-            f"Notes: {json.dumps(input_data.analysis_notes)}"
+            f"Outline: {data.outline.json()}\n"
+            f"Characters: {json.dumps([c.dict() for c in data.characters])}\n"
+            f"Notes: {json.dumps(data.analysis_notes)}"
         )
         response = new_driver(temperature=0.7).run(stack_with_message(prompt))
         scenes = json.loads(clean_json(response)).get("scenes", [])
-        return StoryData(premise=input_data.premise, outline=input_data.outline, characters=input_data.characters, analysis_notes=input_data.analysis_notes, screenplay_scenes=scenes)
+        return StoryData(premise=data.premise, outline=data.outline, characters=data.characters, analysis_notes=data.analysis_notes, screenplay_scenes=scenes)
 
 # -----------------------------------------------------------------------------
 # Pipeline orchestrator
@@ -187,11 +148,11 @@ def run_story_pipeline(premise: str) -> StoryData:
 
 if __name__ == "__main__":
     premise = "A girl discovers her memories have been encoded into a planetary AI network."
-    story = run_story_pipeline(premise)
-    print("\nTITLE:", story.outline.title)
-    print("\nCHARACTERS:", [c.dict() for c in story.characters])
-    print("\nNOTES:", story.analysis_notes)
-    if story.screenplay_scenes:
-        print("\nSCENE 1 PREVIEW:\n", story.screenplay_scenes[0]["content"][:400])
+    final_story = run_story_pipeline(premise)
+    print("TITLE:", final_story.outline.title)
+    print("CHARACTERS:", [c.dict() for c in final_story.characters])
+    print("NOTES:", final_story.analysis_notes)
+    if final_story.screenplay_scenes:
+        print("SCENE 1 PREVIEW:\n", final_story.screenplay_scenes[0]["content"][:400])
     else:
-        print("\nNo scenes generated.")
+        print("No scenes generated.")
