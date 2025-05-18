@@ -1,41 +1,54 @@
-from griptape.structures import Workflow
-from griptape.tasks import PromptTask
+version: "1.0"
+runtime: python3
+runtime_version: "3.11"
 
-def build_workflow():
-    workflow = Workflow()
+structure:
+  id: screenwriter_pipeline
+  description: >
+    A Griptape structure that chains four prebuilt agents (Plot Architect, Character Designer,
+    Thematic Analyst, Scene Shaper) using Robert McKee’s story principles and a shared StoryContext.
 
-    # TASK 1: Plot Architect
-    plot_task = workflow.add_task(
-        build_plot_architect(),
-        input={"premise": "{{ args[0] }}"}
-    )
+  inputs:
+    - name: premise
+      description: "Story premise (logline)"
+      required: true
+      type: string
 
-    # TASK 2: Character Designer
-    char_task = workflow.add_task(
-        build_character_designer(),
-        input={"outline": "{{ tasks.plot_architect.output | to_json }}"}
-    )
+  tasks:
+    - id: plot_architect
+      type: agent
+      agent_id: a22089b6-420d-4dd3-8aa8-c2689f59eab7
+      input_template: |
+        {{ args[0] }}
 
-    # TASK 3: Thematic Analyst
-    theme_task = workflow.add_task(
-        build_thematic_analyst(),
-        input={
-            "outline": "{{ tasks.plot_architect.output | to_json }}",
-            "characters": "{{ tasks.character_designer.output.characters | to_json }}"
+    - id: character_designer
+      type: agent
+      agent_id: dee8980d-a058-47f4-b3cb-71288f7592de
+      input_template: |
+        {{ tasks.plot_architect.output | to_json }}
+
+    - id: thematic_analyst
+      type: agent
+      agent_id: 2bf4393c-437e-4c72-a856-b58cae433e3c
+      input_template: |
+        {
+          "outline": {{ tasks.plot_architect.output | to_json }},
+          "characters": {{ tasks.character_designer.output | to_json }}
         }
-    )
 
-    # TASK 4: Scene Shaper
-    scene_task = workflow.add_task(
-        build_scene_shaper(),
-        input={
-            "premise": "{{ args[0] | to_json }}",
-            "outline": "{{ tasks.plot_architect.output | to_json }}",
-            "characters": "{{ tasks.character_designer.output.characters | to_json }}",
-            "notes": "{{ tasks.thematic_analyst.output.notes | to_json }}"
+    - id: scene_shaper
+      type: agent
+      agent_id: f5187591-9a49-454e-add4-50eec9bc4ca8
+      input_template: |
+        {
+          "premise": {{ args[0] | to_json }},
+          "outline": {{ tasks.plot_architect.output | to_json }},
+          "characters": {{ tasks.character_designer.output | to_json }},
+          "notes": {{ tasks.thematic_analyst.output.notes | to_json }}
         }
-    )
 
-    workflow.output_task_id = scene_task.id
-    result = workflow.run()
-    return result.output_task.output.value
+  output_task: scene_shaper
+
+run:
+  main_file: structure.py
+  entrypoint: structure:build_workflow
