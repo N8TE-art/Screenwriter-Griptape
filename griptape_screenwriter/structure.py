@@ -37,4 +37,4 @@ def build_workflow():
     )
 
     workflow.output_task_id = scene_task.id
-    return workflow
+    return workflow.run()
