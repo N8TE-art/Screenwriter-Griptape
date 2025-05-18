@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional
 from pydantic import BaseModel, ValidationError
-from griptape.structures import Agent
+from griptape.structures import Agent, PromptStack
 from griptape.drivers import OpenAiChatPromptDriver
 
 # Shared schema using Pydantic
@@ -34,7 +34,7 @@ class StoryData(BaseModel):
     analysis_notes: List[str] = []
     screenplay_scenes: List[dict] = []
 
-# Default driver (replace with your configured driver if needed)
+# Default driver
 DEFAULT_DRIVER = OpenAiChatPromptDriver(model="gpt-4", temperature=0.3)
 
 class PlotArchitectAgent(Agent):
@@ -64,7 +64,7 @@ Also include:
 
 Respond ONLY with a valid JSON object.
 """
-        response = DEFAULT_DRIVER.run(prompt)
+        response = DEFAULT_DRIVER.run(PromptStack().add_user_message(prompt))
         try:
             parsed = Outline.parse_raw(response)
         except ValidationError:
@@ -85,7 +85,7 @@ Design 3–5 characters who reflect or challenge the theme.
 For each, include: name, role, backstory, desire, need, arc.
 Respond ONLY with: {{ "characters": [ {{...}}, ... ] }}
 """
-        response = DEFAULT_DRIVER.run(prompt)
+        response = DEFAULT_DRIVER.run(PromptStack().add_user_message(prompt))
         parsed = json.loads(response)
         characters = [Character.parse_obj(c) for c in parsed["characters"]]
         return StoryData(
@@ -117,7 +117,7 @@ Check if protagonist is challenged to confront their Need.
 Respond with:
 {{ "issues_found": true/false, "notes": ["..."] }}
 """
-        response = DEFAULT_DRIVER.run(prompt)
+        response = DEFAULT_DRIVER.run(PromptStack().add_user_message(prompt))
         parsed = json.loads(response)
         return StoryData(
             premise=input_data.premise,
@@ -146,7 +146,7 @@ Analyst Notes:
 Write formatted screenplay scenes. Respond with:
 {{ "scenes": [ {{"number": int, "content": "Scene text..."}}, ... ] }}
 """
-        response = DEFAULT_DRIVER.run(prompt)
+        response = DEFAULT_DRIVER.run(PromptStack().add_user_message(prompt))
         parsed = json.loads(response)
         return StoryData(
             premise=input_data.premise,
