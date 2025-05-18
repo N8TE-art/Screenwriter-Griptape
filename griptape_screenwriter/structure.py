@@ -1,54 +1,173 @@
-version: "1.0"
-runtime: python3
-runtime_version: "3.11"
+import json
+from typing import List, Optional
+from pydantic import BaseModel, ValidationError
+from griptape.structures import Agent
+from griptape.drivers import OpenAiChatPromptDriver
 
-structure:
-  id: screenwriter_pipeline
-  description: >
-    A Griptape structure that chains four prebuilt agents (Plot Architect, Character Designer,
-    Thematic Analyst, Scene Shaper) using Robert McKee story principles and a shared StoryContext.
+# Shared schema using Pydantic
+class Scene(BaseModel):
+    act: int
+    number: int
+    description: str
+    conflict: str
+    value_change: str
 
-  inputs:
-    - name: premise
-      description: "Story premise (logline)"
-      required: true
-      type: string
+class Outline(BaseModel):
+    title: str
+    theme: str
+    protagonist_desire: str
+    protagonist_need: str
+    scenes: List[Scene]
 
-  tasks:
-    - id: plot_architect
-      type: agent
-      agent_id: a22089b6-420d-4dd3-8aa8-c2689f59eab7
-      input_template: |
-        {{ args[0] }}
+class Character(BaseModel):
+    name: str
+    role: str
+    backstory: str
+    desire: str
+    need: str
+    arc: str
 
-    - id: character_designer
-      type: agent
-      agent_id: dee8980d-a058-47f4-b3cb-71288f7592de
-      input_template: |
-        {{ tasks.plot_architect.output | to_json }}
+class StoryData(BaseModel):
+    premise: Optional[str] = None
+    outline: Optional[Outline] = None
+    characters: List[Character] = []
+    analysis_notes: List[str] = []
+    screenplay_scenes: List[dict] = []
 
-    - id: thematic_analyst
-      type: agent
-      agent_id: 2bf4393c-437e-4c72-a856-b58cae433e3c
-      input_template: |
-        {
-          "outline": {{ tasks.plot_architect.output | to_json }},
-          "characters": {{ tasks.character_designer.output | to_json }}
-        }
+# Default driver (replace with your configured driver if needed)
+DEFAULT_DRIVER = OpenAiChatPromptDriver(model="gpt-4", temperature=0.3)
 
-    - id: scene_shaper
-      type: agent
-      agent_id: f5187591-9a49-454e-add4-50eec9bc4ca8
-      input_template: |
-        {
-          "premise": {{ args[0] | to_json }},
-          "outline": {{ tasks.plot_architect.output | to_json }},
-          "characters": {{ tasks.character_designer.output | to_json }},
-          "notes": {{ tasks.thematic_analyst.output.notes | to_json }}
-        }
+class PlotArchitectAgent(Agent):
+    def run(self, input_data: StoryData) -> StoryData:
+        prompt = f"""
+You are a Plot Architect AI. Develop a screenplay outline using Robert McKee's Three-Act structure.
 
-  output_task: scene_shaper
+Premise: "{input_data.premise}"
 
-run:
-  main_file: structure.py
-  entrypoint: structure:build_workflow
+Follow the structure:
+- Act I (Setup): Inciting Incident
+- Act II (Conflict): Rising conflict, midpoint, major crisis
+- Act III (Resolution): Climax and transformation
+
+Each scene must include:
+- act (1|2|3)
+- number
+- description
+- conflict
+- value_change
+
+Also include:
+- title
+- theme
+- protagonist_desire
+- protagonist_need
+
+Respond ONLY with a valid JSON object.
+"""
+        response = DEFAULT_DRIVER.run(prompt)
+        try:
+            parsed = Outline.parse_raw(response)
+        except ValidationError:
+            parsed = Outline.parse_obj(json.loads(response.strip('`')))
+        return StoryData(premise=input_data.premise, outline=parsed)
+
+class CharacterDesignerAgent(Agent):
+    def run(self, input_data: StoryData) -> StoryData:
+        prompt = f"""
+You are a Character Designer AI.
+
+Title: {input_data.outline.title}
+Theme: {input_data.outline.theme}
+Protagonist's Desire: {input_data.outline.protagonist_desire}
+Protagonist's Need: {input_data.outline.protagonist_need}
+
+Design 3–5 characters who reflect or challenge the theme.
+For each, include: name, role, backstory, desire, need, arc.
+Respond ONLY with: {{ "characters": [ {{...}}, ... ] }}
+"""
+        response = DEFAULT_DRIVER.run(prompt)
+        parsed = json.loads(response)
+        characters = [Character.parse_obj(c) for c in parsed["characters"]]
+        return StoryData(
+            premise=input_data.premise,
+            outline=input_data.outline,
+            characters=characters
+        )
+
+class ThematicAnalystAgent(Agent):
+    def run(self, input_data: StoryData) -> StoryData:
+        prompt = f"""
+You are a Thematic Analyst AI reviewing a screenplay.
+
+Title: {input_data.outline.title}
+Theme: {input_data.outline.theme}
+
+Characters:
+{json.dumps([c.dict() for c in input_data.characters], indent=2)}
+
+Scenes:
+{json.dumps([s.dict() for s in input_data.outline.scenes], indent=2)}
+
+Evaluate each scene:
+- Is conflict clear?
+- Is there a value change?
+- Does it reflect or oppose the theme?
+Check if protagonist is challenged to confront their Need.
+
+Respond with:
+{{ "issues_found": true/false, "notes": ["..."] }}
+"""
+        response = DEFAULT_DRIVER.run(prompt)
+        parsed = json.loads(response)
+        return StoryData(
+            premise=input_data.premise,
+            outline=input_data.outline,
+            characters=input_data.characters,
+            analysis_notes=parsed.get("notes", [])
+        )
+
+class SceneShaperAgent(Agent):
+    def run(self, input_data: StoryData) -> StoryData:
+        prompt = f"""
+You are a Scene Shaper AI. Write screenplay scenes.
+
+Title: {input_data.outline.title}
+Theme: {input_data.outline.theme}
+
+Characters:
+{json.dumps([c.dict() for c in input_data.characters], indent=2)}
+
+Scenes:
+{json.dumps([s.dict() for s in input_data.outline.scenes], indent=2)}
+
+Analyst Notes:
+{json.dumps(input_data.analysis_notes)}
+
+Write formatted screenplay scenes. Respond with:
+{{ "scenes": [ {{"number": int, "content": "Scene text..."}}, ... ] }}
+"""
+        response = DEFAULT_DRIVER.run(prompt)
+        parsed = json.loads(response)
+        return StoryData(
+            premise=input_data.premise,
+            outline=input_data.outline,
+            characters=input_data.characters,
+            analysis_notes=input_data.analysis_notes,
+            screenplay_scenes=parsed.get("scenes", [])
+        )
+
+def run_story_pipeline(premise: str) -> StoryData:
+    data = StoryData(premise=premise)
+    data = PlotArchitectAgent().run(data)
+    data = CharacterDesignerAgent().run(data)
+    data = ThematicAnalystAgent().run(data)
+    data = SceneShaperAgent().run(data)
+    return data
+
+if __name__ == "__main__":
+    sample_premise = "A girl discovers her memories have been encoded into a planetary AI network."
+    result = run_story_pipeline(sample_premise)
+    print("\nTITLE:\n", result.outline.title)
+    print("\nCHARACTERS:\n", [c.dict() for c in result.characters])
+    print("\nNOTES:\n", result.analysis_notes)
+    print("\nSCREENPLAY EXCERPT:\n", result.screenplay_scenes[0]["content"][:500] if result.screenplay_scenes else "No scenes generated.")
