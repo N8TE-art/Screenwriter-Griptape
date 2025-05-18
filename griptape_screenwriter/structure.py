@@ -163,4 +163,7 @@ def run_workflow():
 
     debug(plot_task.id, "PLOT")
     debug(char_task.id, "CHARACTERS")
-    debug(theme_task.id, "
+    debug(theme_task.id, "THEME")
+    debug(scene_task.id, "SCREENPLAY")
+
+    return workflow
