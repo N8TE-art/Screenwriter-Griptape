@@ -1,1 +1,4 @@
-griptape[openai]>=1.5.0
+```text
+griptape[all]==0.23.0   # Griptape framework (including all optional drivers, e.g. OpenAI)
+pydantic==1.10.8        # Pydantic for defining output schemas
+```text
