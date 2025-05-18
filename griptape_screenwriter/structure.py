@@ -8,7 +8,6 @@ try:
     from griptape.structures import PromptStack  # primary location in 0.23 wheel
 except ImportError:
     from griptape.utils import PromptStack      # fallback for older builds
-from griptape.schemas import UserMessage             # official user‑role message
 from griptape.drivers import OpenAiChatPromptDriver
 
 # -----------------------------------------------------------------------------
@@ -68,9 +67,32 @@ def new_driver(model: str | None = None, temperature: float = 0.3) -> OpenAiChat
 # PromptStack helper guaranteed for Griptape 0.23.x
 # -----------------------------------------------------------------------------
 
+class _UserMsg:
+    """Minimal user message with required callables for the driver."""
+    def __init__(self, content: str):
+        self.content = content
+    def is_system(self):
+        return False
+    def is_user(self):
+        return True
+    def is_assistant(self):
+        return False
+
+
 def stack_with_message(prompt: str) -> PromptStack:
     stack = PromptStack()
-    stack.add_message(UserMessage(content=prompt))
+    if hasattr(stack, "add_user_message"):
+        stack.add_user_message(prompt)
+    elif hasattr(stack, "add_message"):
+        try:
+            stack.add_message(prompt, "user")
+        except TypeError:
+            stack.add_message("user", prompt)
+    else:
+        if hasattr(stack, "inputs") and isinstance(stack.inputs, list):
+            stack.inputs.append(_UserMsg(prompt))
+        else:
+            raise AttributeError("PromptStack in this version cannot accept messages")
     return stack
 
 # -----------------------------------------------------------------------------
@@ -159,4 +181,3 @@ if __name__ == "__main__":
         print("SCENE 1 PREVIEW:\n", final_story.screenplay_scenes[0]["content"][:400])
     else:
         print("No scenes generated.")
-
