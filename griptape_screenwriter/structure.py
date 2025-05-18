@@ -26,4 +26,8 @@ class StoryContext(BaseModel):  # 👈 Unifying Schema
 def build_workflow():
     # build tasks...
     workflow.output_task_id = scene_task.id
+    print("PLOT:", plot_task.output)
+print("CHARACTERS:", char_task.output)
+print("THEME:", theme_task.output)
+print("SCRIPT:", scene_task.output)
     return workflow.run()
