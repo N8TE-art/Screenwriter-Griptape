@@ -1,164 +1,114 @@
-import json
-import sys
-import os
+```python
 from griptape.structures import Workflow
-from griptape.tasks import StructureRunTask
-from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
-from pydantic import BaseModel, Field
-from typing import List
+from griptape.tasks import PromptTask
+from griptape.drivers import OpenAiChatPromptDriver
+from pydantic import BaseModel
 
-# --- SCHEMAS ---
+# 1. Define Pydantic models for structured outputs (schemas)
+class Scene(BaseModel):
+    description: str           # brief description of scene events
+    value_change: str          # the key emotional or narrative shift in the scene
+
 class PlotOutline(BaseModel):
-    logline: str
-    outline: List[str]
+    theme: str
+    protagonist_want: str
+    protagonist_need: str
+    scenes: list[Scene]
 
 class CharacterProfile(BaseModel):
     name: str
-    role: str
-    description: str
-    arc: str
+    role: str                  # e.g., protagonist, antagonist, mentor, etc.
+    backstory: str
+    desire: str                # what the character wants
+    need: str                  # what the character truly needs to learn
+    arc: str                   # summary of the character's arc over the story
 
-class CharacterList(BaseModel):
-    characters: List[CharacterProfile]
+class CharacterProfiles(BaseModel):
+    characters: list[CharacterProfile]
 
-class ValueTransition(BaseModel):
-    scene: int
-    from_value: str
-    to_value: str
+class StoryAnalysis(BaseModel):
+    issues: list[str]          # list of short descriptions of issues/inconsistencies
+    thematic_alignment: str    # analysis of how well the theme is conveyed
 
-class ValueTransitions(BaseModel):
-    transitions: List[ValueTransition]
+class SceneScript(BaseModel):
+    scene_number: int
+    content: str               # the scene description or dialogue in screenplay format
 
 class Screenplay(BaseModel):
-    script: str
+    scenes: list[SceneScript]
 
-# --- AGENTS ---
-def build_plot_architect():
-    prompt = (
-        "Respond ONLY with raw JSON. Do not include any explanations.\n"
-        "You are a Plot Architect writing a screenplay outline based on the premise: '{{ input.premise }}'.\n"
-        "Provide a one-sentence LOGLINE and a STORY OUTLINE as a list of scenes.\n"
-        "Return an object with keys: 'logline' (string), 'outline' (array of scene descriptions)."
+# 2. Initialize the structure's LLM driver (using OpenAI GPT-4)
+structure = Workflow(
+    prompt_driver=OpenAiChatPromptDriver(
+        model="gpt-4",                 # Use GPT-4 for high-quality, schema-guided output
+        temperature=0.0,               # Deterministic outputs for consistency
+        max_tokens=2000                # Allow sufficient length for detailed outputs
+        # (The OpenAI API key is provided via the OPENAI_API_KEY environment variable)
     )
-    input_schema = type("PlotInput", (BaseModel,), {"premise": (str, ...)})
-    return StructureRunTask(
-        id="plot_architect",
-        prompt_template=prompt,
-        input_schema=input_schema,
-        output_schema=PlotOutline,
-        prompt_driver=OpenAiChatPromptDriver(model="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
-    )
+)
 
-def build_character_designer():
-    prompt = (
-        "Respond ONLY with raw JSON. Do not include any explanations.\n"
-        "You are a Character Designer. Given the premise '{{ input.premise }}' and outline:\n{{ input.outline }}\n"
-        "Generate character profiles as JSON with fields: name, role, description, and arc."
-    )
-    input_schema = type("CharInput", (BaseModel,), {
-        "premise": (str, ...),
-        "outline": (str, ...)
-    })
-    return StructureRunTask(
-        id="character_designer",
-        prompt_template=prompt,
-        input_schema=input_schema,
-        output_schema=CharacterList,
-        prompt_driver=OpenAiChatPromptDriver(model="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
-    )
+# 3. Define the PromptTasks for each agent and add them to the workflow
+plot_architect_task = PromptTask(
+    # Plot Architect Prompt: generate PlotOutline JSON from premise
+    "You are the **Plot Architect**. Given the film premise: '{{ args[0] }}', "
+    "create a detailed **PlotOutline** as a JSON object with the following keys:\n"
+    "- **theme**: the story's main theme or message\n"
+    "- **protagonist_want**: what the protagonist wants initially\n"
+    "- **protagonist_need**: what the protagonist truly needs or learns\n"
+    "- **scenes**: a list of scenes, each with a **description** and the key **value_change** in that scene\n\n"
+    "Output *only* the JSON for the PlotOutline, adhering to the exact schema.",
+    id="plot_outline",
+    output_schema=PlotOutline,
+    child_ids=["characters", "analysis", "screenplay"]
+)
 
-def build_thematic_analyst():
-    prompt = (
-        "Respond ONLY with raw JSON. Do not include any explanations.\n"
-        "You are a Thematic Analyst. Given the outline:\n{{ input.outline }}\nand characters:\n{{ input.characters }}\n"
-        "List each scene's value change as JSON: scene, from_value, to_value."
-    )
-    input_schema = type("ThemeInput", (BaseModel,), {
-        "outline": (str, ...),
-        "characters": (str, ...)
-    })
-    return StructureRunTask(
-        id="thematic_analyst",
-        prompt_template=prompt,
-        input_schema=input_schema,
-        output_schema=ValueTransitions,
-        prompt_driver=OpenAiChatPromptDriver(model="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
-    )
+character_designer_task = PromptTask(
+    # Character Designer Prompt: generate CharacterProfiles JSON from PlotOutline
+    "You are the **Character Designer**. Using the PlotOutline JSON below:\n"
+    "{{ parent_outputs['plot_outline'] }}\n\n"
+    "Develop a **CharacterProfiles** JSON with a list of main characters. For each character, include:\n"
+    "- **name**\n- **role** (e.g. protagonist, antagonist)\n- **backstory**\n- **desire** (their goal)\n- **need** (their true need)\n- **arc** (how the character changes)\n\n"
+    "Output only the JSON object matching the CharacterProfiles schema.",
+    id="characters",
+    output_schema=CharacterProfiles,
+    child_ids=["analysis", "screenplay"]
+)
 
-def build_scene_shaper():
-    prompt = (
-        "Respond ONLY with raw JSON. Do not include any explanations.\n"
-        "You are a Screenwriter. Write a full screenplay using:\n"
-        "Premise: {{ input.premise }}\n"
-        "Outline: {{ input.outline }}\n"
-        "Characters: {{ input.characters }}\n"
-        "Value Transitions: {{ input.transitions }}\n"
-        "Return the complete script in one text block."
-    )
-    input_schema = type("ScriptInput", (BaseModel,), {
-        "premise": (str, ...),
-        "outline": (str, ...),
-        "characters": (str, ...),
-        "transitions": (str, ...)
-    })
-    return StructureRunTask(
-        id="scene_shaper",
-        prompt_template=prompt,
-        input_schema=input_schema,
-        output_schema=Screenplay,
-        prompt_driver=OpenAiChatPromptDriver(model="gpt-4", api_key=os.getenv("OPENAI_API_KEY"))
-    )
+thematic_analyst_task = PromptTask(
+    # Thematic Analyst Prompt: analyze theme and issues using PlotOutline + CharacterProfiles
+    "You are the **Thematic Analyst**. Review the story outline and characters below:\n"
+    "**Plot Outline:** {{ parent_outputs['plot_outline'] }}\n"
+    "**Characters:** {{ parent_outputs['characters'] }}\n\n"
+    "Provide a **StoryAnalysis** JSON object evaluating the story. Include:\n"
+    "- **issues**: a list of any plot or character issues/inconsistencies you see\n"
+    "- **thematic_alignment**: a brief discussion of how well the story's theme is conveyed, and any suggestions to improve it\n\n"
+    "Only output the JSON object matching the StoryAnalysis schema.",
+    id="analysis",
+    output_schema=StoryAnalysis
+    # (No child_ids since this is a terminal task for analysis)
+)
 
-# --- WORKFLOW ---
-def run_workflow():
-    workflow = Workflow()
+scene_shaper_task = PromptTask(
+    # Scene Shaper Prompt: create Screenplay JSON (scenes) from PlotOutline + CharacterProfiles
+    "You are the **Scene Shaper**. Based on the Plot Outline and Characters below, write a screenplay outline:\n"
+    "**Plot Outline:** {{ parent_outputs['plot_outline'] }}\n"
+    "**Characters:** {{ parent_outputs['characters'] }}\n\n"
+    "Produce a **Screenplay** JSON object with a list of scenes. Each scene should have:\n"
+    "- **scene_number**: the scene index\n- **content**: the scene description or sample dialogue (in screenplay style, e.g., with setting or character dialogue)\n\n"
+    "Output only the JSON object following the Screenplay schema.",
+    id="screenplay",
+    output_schema=Screenplay
+    # (No child_ids since this is the final screenplay output)
+)
 
-    if len(sys.argv) < 2:
-        print("Usage: python structure.py \"<premise>\"")
-        sys.exit(1)
+# Add all tasks to the workflow structure
+structure.add_tasks(
+    plot_architect_task,
+    character_designer_task,
+    thematic_analyst_task,
+    scene_shaper_task
+)
 
-    premise = sys.argv[1]
-
-    plot_task = workflow.add_task(build_plot_architect(), input={"premise": premise})
-    char_task = workflow.add_task(
-        build_character_designer(),
-        input={"premise": premise, "outline": "{{ tasks.plot_architect.output }}"},
-        parent_task_id=plot_task.id
-    )
-    theme_task = workflow.add_task(
-        build_thematic_analyst(),
-        input={"outline": "{{ tasks.plot_architect.output }}", "characters": "{{ tasks.character_designer.output }}"},
-        parent_task_id=char_task.id
-    )
-    scene_task = workflow.add_task(
-        build_scene_shaper(),
-        input={
-            "premise": premise,
-            "outline": "{{ tasks.plot_architect.output }}",
-            "characters": "{{ tasks.character_designer.output }}",
-            "transitions": "{{ tasks.thematic_analyst.output }}"
-        },
-        parent_task_id=theme_task.id
-    )
-
-    workflow.output_task_id = scene_task.id
-
-    # Debug function to inspect task outputs
-    def debug(task_id, label):
-        task = workflow.find_task_by_id(task_id)
-        if task and task.output:
-            print(f"\n=== {label} Output ===\n{task.output.value}\n")
-        else:
-            print(f"\n=== {label} Output: None or Invalid ===")
-
-    # Run the workflow
-    workflow.run()
-
-    # Debug outputs
-    debug(plot_task.id, "PLOT")
-    debug(char_task.id, "CHARACTERS")
-    debug(theme_task.id, "THEME")
-    debug(scene_task.id, "SCREENPLAY")
-
-    return workflow
-
+# The structure will expect an input (premise) when run. 
+# Each task's output will be logged and can be retrieved by its id for debugging or further use.
+```python
