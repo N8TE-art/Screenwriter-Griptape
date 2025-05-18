@@ -72,12 +72,27 @@ def new_driver(model: str = None, temperature: float = 0.3) -> OpenAiChatPromptD
 
 
 def stack_with_message(prompt: str) -> PromptStack:
-    """Return a PromptStack with a single user message, compatible with 0.23.x"""
+    """Return a PromptStack containing a single user message in the most
+    version‑agnostic way possible (0.22 → 0.24)."""
+    # Preferred shortcut if factory exists
+    if hasattr(PromptStack, "from_artifact"):
+        return PromptStack.from_artifact(prompt)
+
     stack = PromptStack()
+    # Newer helper (0.23+)
     if hasattr(stack, "add_user_message"):
         stack.add_user_message(prompt)
+    # Older generic helper (pre‑0.23 nightly)
+    elif hasattr(stack, "add_message"):
+        stack.add_message(prompt, "user")
     else:
-        stack.add_message("user", prompt)  # older generic fallback
+        # Ultimate fallback: try .inputs list used by drivers
+        if hasattr(stack, "messages"):
+            stack.messages.append({"role": "user", "content": prompt})
+        elif hasattr(stack, "inputs"):
+            stack.inputs.append(prompt)  # very old prototype
+        else:
+            raise AttributeError("PromptStack has no method to add a user message in this Griptape version")
     return stack
 
 # -----------------------------------------------------------------------------
